@@ -1,0 +1,138 @@
+services:
+  db-auth:
+    image: postgres:latest
+    container_name: db-auth
+    restart: always
+    env_file:
+      - ./dbs/auth/db-auth/.env
+    volumes:
+      - /d/Projetos/Mynance/dbs/auth/db-auth/data:/var/lib/postgresql/data
+      - ./dbs/auth/db-auth/init.sql:/docker-entrypoint-initdb.d/init.sql
+  db-auth-admin:
+    image: postgres:latest
+    container_name: db-auth-admin
+    restart: always
+    env_file:
+      - ./dbs/auth/db-auth-admin/.env
+    volumes:
+      - /d/Projetos/Mynance/dbs/auth/db-auth-admin/data:/var/lib/postgresql/data
+      - ./dbs/auth/db-auth-admin/init.sql:/docker-entrypoint-initdb.d/init.sql
+  db-categories:
+    image: postgres:latest
+    container_name: db-categories
+    restart: always
+    env_file:
+      - ./dbs/microservices/db-categories/.env
+    volumes:
+      - /d/Projetos/Mynance/dbs/microservices/db-categories/data:/var/lib/postgresql/data
+      - ./dbs/microservices/db-categories/init.sql:/docker-entrypoint-initdb.d/init.sql
+  db-creditcards:
+    image: postgres:latest
+    container_name: db-creditcards
+    restart: always
+    env_file:
+      - ./dbs/microservices/db-creditcards/.env
+    volumes:
+      - /d/Projetos/Mynance/dbs/microservices/db-creditcards/data:/var/lib/postgresql/data
+      - ./dbs/microservices/db-creditcards/init.sql:/docker-entrypoint-initdb.d/init.sql
+  db-creditcards-expenses:
+    image: postgres:latest
+    container_name: db-creditcards-expenses
+    restart: always
+    env_file:
+      - ./dbs/microservices/db-creditcards-expenses/.env
+    volumes:
+      - /d/Projetos/Mynance/dbs/microservices/db-creditcards-expenses/data:/var/lib/postgresql/data
+      - ./dbs/microservices/db-creditcards-expenses/init.sql:/docker-entrypoint-initdb.d/init.sql
+  db-expenses:
+    image: postgres:latest
+    container_name: db-expenses
+    restart: always
+    env_file:
+      - ./dbs/microservices/db-expenses/.env
+    volumes:
+      - /d/Projetos/Mynance/dbs/microservices/db-expenses/data:/var/lib/postgresql/data
+      - ./dbs/microservices/db-expenses/init.sql:/docker-entrypoint-initdb.d/init.sql
+  db-incomes:
+    image: postgres:latest
+    container_name: db-incomes
+    restart: always
+    env_file:
+      - ./dbs/microservices/db-incomes/.env
+    volumes:
+      - /d/Projetos/Mynance/dbs/microservices/db-incomes/data:/var/lib/postgresql/data
+      - ./dbs/microservices/db-incomes/init.sql:/docker-entrypoint-initdb.d/init.sql
+  myance-auth:
+    build:
+      context: ./auth/mynance-auth
+      dockerfile: Dockerfile
+    container_name: mynance-auth
+    restart: on-failure
+    env_file:
+      - ./auth/mynance-auth/.env
+    depends_on:
+      - db-auth
+  myance-auth-admin:
+    build:
+      context: ./auth/mynance-auth-admin
+      dockerfile: Dockerfile
+    container_name: mynance-auth
+    restart: on-failure
+    env_file:
+      - ./auth/mynance-auth-admin/.env
+    depends_on:
+      - db-auth-admin
+  myance-categories:
+    build:
+      context: ./microservices/mynance-categories
+      dockerfile: Dockerfile
+    container_name: mynance-categories
+    restart: on-failure
+    env_file:
+      - ./microservices/mynance-categories/.env
+    depends_on:
+      - db-categories
+
+  myance-creditcards:
+    build:
+      context: ./microservices/mynance-creditcards
+      dockerfile: Dockerfile
+    container_name: mynance-creditcards
+    restart: on-failure
+    env_file:
+      - ./microservices/mynance-creditcards/.env
+    depends_on:
+      - db-creditcards
+  
+  myance-creditcards-expenses:
+    build:
+      context: ./microservices/mynance-creditcards-expenses
+      dockerfile: Dockerfile
+    container_name: mynance-creditcards-expenses
+    restart: on-failure
+    env_file:
+      - ./microservices/mynance-creditcards-expenses/.env
+    depends_on:
+      - db-creditcards-expenses
+
+  myance-expenses:
+    build:
+      context: ./microservices/mynance-expenses
+      dockerfile: Dockerfile
+    container_name: mynance-expenses
+    restart: on-failure
+    env_file:
+      - ./microservices/mynance-expenses/.env
+    depends_on:
+      - db-expenses
+  
+  myance-incomes:
+    build:
+      context: ./microservices/mynance-incomes
+      dockerfile: Dockerfile
+    container_name: mynance-incomes
+    restart: on-failure
+    env_file:
+      - ./microservices/mynance-incomes/.env
+    depends_on:
+      - db-incomes
