@@ -66,10 +66,17 @@ var (
 		[]string{"service"},
 	)
 
-	DBOpenConns       prometheus.GaugeFunc
-	dbGaugeRegistered bool
-	metricsServer     *http.Server
-	initOnce          sync.Once
+	dbOpenConns = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "db_open_connections",
+			Help: "Number of open database connections.",
+		},
+		[]string{"db_name"},
+	)
+	dbGaugeRegistered = false
+
+	metricsServer *http.Server
+	initOnce      sync.Once
 )
 
 // getServiceName reads SERVICE_NAME or defaults to "unknown"
@@ -80,26 +87,25 @@ func getServiceName() string {
 	return "unknown"
 }
 
-// SetDBForMonitoring registers a DB connection gauge
-func SetDBForMonitoring(db *sql.DB) {
-	DBOpenConns = prometheus.NewGaugeFunc(
-		prometheus.GaugeOpts{
-			Name: "db_open_connections",
-			Help: "Number of open database connections.",
-		},
-		func() float64 {
-			return float64(db.Stats().OpenConnections)
-		},
-	)
-	prometheus.MustRegister(DBOpenConns)
-	dbGaugeRegistered = true
+// SetDBForMonitoring registers a labeled gauge for a given DB instance
+func SetDBForMonitoring(db *sql.DB, name string) {
+	if !dbGaugeRegistered {
+		prometheus.MustRegister(dbOpenConns)
+		dbGaugeRegistered = true
+	}
+
+	go func() {
+		for {
+			dbOpenConns.WithLabelValues(name).Set(float64(db.Stats().OpenConnections))
+			time.Sleep(10 * time.Second)
+		}
+	}()
 }
 
-// CloseDBForMonitoring unregisters the DB gauge
-func CloseDBForMonitoring() {
+// RemoveDBFromMonitoring removes a DB gauge from Prometheus monitoring
+func RemoveDBFromMonitoring(name string) {
 	if dbGaugeRegistered {
-		prometheus.Unregister(DBOpenConns)
-		dbGaugeRegistered = false
+		dbOpenConns.DeleteLabelValues(name)
 	}
 }
 

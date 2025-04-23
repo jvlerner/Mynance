@@ -4,43 +4,54 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
+	"sync"
 	"time"
 
 	_ "github.com/lib/pq"
 )
 
-var DB *sql.DB
+var (
+	dbs  = make(map[string]*sql.DB)
+	lock = sync.RWMutex{}
+)
 
-func InitDB() {
+// InitDB initializes and stores a database connection under the given name
+func InitDB(name, user, password, host, port, dbName string) {
 	connStr := fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_NAME"),
+		user,
+		password,
+		host,
+		port,
+		dbName,
 	)
 
 	const maxRetries = 10
 	const retryInterval = 3 * time.Second
 
+	var db *sql.DB
 	var err error
+
 	for i := 1; i <= maxRetries || maxRetries == -1; i++ {
-		DB, err = sql.Open("postgres", connStr)
+		db, err = sql.Open("postgres", connStr)
 		if err != nil {
 			log.Printf("[ERROR] [DB] Attempt %d: failed to open connection: %v", i, err)
 			time.Sleep(retryInterval)
 			continue
 		}
 
-		err = DB.Ping()
+		err = db.Ping()
 		if err == nil {
-			DB.SetConnMaxLifetime(5 * time.Minute)
-			DB.SetConnMaxIdleTime(3 * time.Minute)
-			DB.SetMaxIdleConns(5)
-			DB.SetMaxOpenConns(10)
-			log.Println("[INFO] [DB] Successfully connected to the database.")
+			db.SetConnMaxLifetime(5 * time.Minute)
+			db.SetConnMaxIdleTime(3 * time.Minute)
+			db.SetMaxIdleConns(5)
+			db.SetMaxOpenConns(10)
+
+			lock.Lock()
+			dbs[name] = db
+			lock.Unlock()
+
+			log.Printf("[INFO] [DB] Successfully connected to database '%s'.", name)
 			return
 		}
 
@@ -48,17 +59,46 @@ func InitDB() {
 		time.Sleep(retryInterval)
 	}
 
-	log.Fatal("[ERROR] [DB] Failed to connect to the database after multiple attempts.")
+	log.Fatalf("[ERROR] [DB] Failed to connect to database '%s' after multiple attempts.", name)
 }
 
-// CloseDB closes the database connection
-func CloseDB() {
-	if DB != nil {
-		err := DB.Close()
+// GetDB retrieves a previously initialized DB by name
+func GetDB(name string) *sql.DB {
+	lock.RLock()
+	defer lock.RUnlock()
+	return dbs[name]
+}
+
+// CloseDB closes the DB connection and removes it from the map
+func CloseDB(name string) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	if db, exists := dbs[name]; exists && db != nil {
+		err := db.Close()
 		if err != nil {
-			log.Printf("[ERROR] [DB] Error closing database connection: %v", err)
+			log.Printf("[ERROR] [DB] Error closing DB '%s': %v", name, err)
 		} else {
-			log.Println("[INFO] [DB] Database connection closed successfully.")
+			log.Printf("[INFO] [DB] Closed DB '%s' successfully.", name)
+		}
+		delete(dbs, name)
+	}
+}
+
+// CloseAll closes all registered database connections
+func CloseAll() {
+	lock.Lock()
+	defer lock.Unlock()
+
+	for name, db := range dbs {
+		if db != nil {
+			err := db.Close()
+			if err != nil {
+				log.Printf("[ERROR] [DB] Error closing DB '%s': %v", name, err)
+			} else {
+				log.Printf("[INFO] [DB] Closed DB '%s' successfully.", name)
+			}
 		}
 	}
+	dbs = make(map[string]*sql.DB)
 }

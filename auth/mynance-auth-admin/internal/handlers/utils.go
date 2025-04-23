@@ -1,13 +1,17 @@
 package handlers
 
 import (
-	"errors"
 	"os"
 	"regexp"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/jvlerner/my-finance-api/internal/db"
+)
+
+var (
+	userDBName  = os.Getenv("USER_DB_NAME")
+	adminDBName = os.Getenv("ADMIN_DB_NAME")
 )
 
 type Claims struct {
@@ -29,7 +33,7 @@ func isValidPassword(password string) bool {
 }
 
 func GenerateToken(userID int, email, role string) (string, int64, error) {
-	lastPasswordChange, err := db.UserLastPasswordChange(userID)
+	lastPasswordChange, err := db.UserLastPasswordChange(adminDBName, userID)
 	if err != nil {
 		return "", 0, err
 	}
@@ -53,29 +57,4 @@ func GenerateToken(userID int, email, role string) (string, int64, error) {
 		return "", 0, err
 	}
 	return assignedToken, exp, nil
-}
-
-// ValidateToken verifies and returns the claims if the token is valid
-func ValidateToken(tokenString string) (*Claims, error) {
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("JWT_SECRET")), nil
-	})
-
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid token")
-	}
-
-	// Pegar a data da última alteração de senha do banco de dados
-	lastPasswordChange, err := db.UserLastPasswordChange(claims.UserID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Se o token foi gerado antes da última alteração de senha, ele é inválido
-	if claims.LastPasswordChange < lastPasswordChange.Unix() {
-		return nil, errors.New("token invalid due to password change")
-	}
-
-	return claims, nil
 }

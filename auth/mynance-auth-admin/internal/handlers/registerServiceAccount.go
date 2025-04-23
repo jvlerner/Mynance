@@ -18,7 +18,7 @@ func RegisterServiceAccount(c *gin.Context) {
 		return
 	}
 
-	exists, err := db.UserExists(user.Email)
+	exists, err := db.UserExists(adminDBName, user.Email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
@@ -33,7 +33,7 @@ func RegisterServiceAccount(c *gin.Context) {
 		return
 	}
 
-	userID, err := db.CreateServiceAccount(user.Name, user.Email, user.Password)
+	userID, err := db.CreateServiceAccount(adminDBName, user.Name, user.Email, user.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		logger.Log.Error("Failed to create user", zap.String("userName", user.Name), zap.String("userEmail", user.Email), zap.Error(err))

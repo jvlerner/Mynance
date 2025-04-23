@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"sync"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -14,6 +16,12 @@ import (
 	"github.com/jvlerner/my-finance-api/pkg/prometheus"
 )
 
+var (
+	wg          sync.WaitGroup
+	userDBName  = os.Getenv("USER_DB_NAME")
+	adminDBName = os.Getenv("ADMIN_DB_NAME")
+)
+
 func main() {
 	config.LoadEnv()
 	allowedOrigins := config.GetCORS()
@@ -23,12 +31,37 @@ func main() {
 
 	logger.Log.Info("[INFO] Starting MyFinance Auth Admin/Service...")
 
-	postgres.InitDB()
-	defer postgres.CloseDB()
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		postgres.InitDB(userDBName,
+			os.Getenv("DB_USER"),
+			os.Getenv("DB_PASSWORD"),
+			os.Getenv("DB_HOST"),
+			os.Getenv("DB_PORT"),
+			os.Getenv("DB_NAME"),
+		)
+	}()
+
+	go func() {
+		defer wg.Done()
+		postgres.InitDB(adminDBName,
+			os.Getenv("DB_ADMIN_USER"),
+			os.Getenv("DB_ADMIN_PASSWORD"),
+			os.Getenv("DB_ADMIN_HOST"),
+			os.Getenv("DB_ADMIN_PORT"),
+			os.Getenv("DB_ADMIN_NAME"),
+		)
+	}()
+	wg.Wait()
+	defer postgres.CloseAll()
 
 	// Initialize the database metrics
-	prometheus.SetDBForMonitoring(postgres.DB)
-	defer prometheus.CloseDBForMonitoring()
+	prometheus.SetDBForMonitoring(postgres.GetDB(userDBName), userDBName)
+	defer prometheus.RemoveDBFromMonitoring(userDBName)
+
+	prometheus.SetDBForMonitoring(postgres.GetDB(adminDBName), adminDBName)
+	defer prometheus.RemoveDBFromMonitoring(adminDBName)
 
 	// Initialize the metrics
 	prometheus.Init()

@@ -6,55 +6,53 @@ import (
 	"time"
 
 	"github.com/jvlerner/my-finance-api/pkg/postgres"
-
 	"golang.org/x/crypto/bcrypt"
 )
 
 // UserExists checks if a user exists by email
-func UserExists(email string) (bool, error) {
+func UserExists(dbName, email string) (bool, error) {
+	db := postgres.GetDB(dbName)
+
 	var exists bool
-	err := postgres.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)", email).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)", email).Scan(&exists)
+	return exists, err
 }
 
-// CreateUser inserts a new user into the database
-func CreateServiceAccount(name, email, password string) (int, error) {
+// CreateServiceAccount inserts a new service user
+func CreateServiceAccount(dbName, name, email, password string) (int, error) {
+	db := postgres.GetDB(dbName)
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return 0, err
 	}
 
 	var userID int
-	err = postgres.DB.QueryRow("INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id", name, email, string(hashedPassword)).Scan(&userID, "service")
-	if err != nil {
-		return 0, err
-	}
-
-	return userID, nil
+	err = db.QueryRow("INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id",
+		name, email, string(hashedPassword), "service").Scan(&userID)
+	return userID, err
 }
 
-// CreateUser inserts a new user into the database
-func CreateUser(name, email, password string) (int, error) {
+// CreateUser inserts a new user
+func CreateUser(dbName, name, email, password string) (int, error) {
+	db := postgres.GetDB(dbName)
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return 0, err
 	}
 
 	var userID int
-	err = postgres.DB.QueryRow("INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id", name, email, string(hashedPassword)).Scan(&userID)
-	if err != nil {
-		return 0, err
-	}
-
-	return userID, nil
+	err = db.QueryRow("INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id",
+		name, email, string(hashedPassword)).Scan(&userID)
+	return userID, err
 }
 
-func UserLastPasswordChange(userID int) (time.Time, error) {
+func UserLastPasswordChange(dbName string, userID int) (time.Time, error) {
+	db := postgres.GetDB(dbName)
+
 	var lastPasswordChange time.Time
-	err := postgres.DB.QueryRow("SELECT last_password_change FROM users WHERE id = $1", userID).Scan(&lastPasswordChange)
+	err := db.QueryRow("SELECT last_password_change FROM users WHERE id = $1", userID).Scan(&lastPasswordChange)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return time.Time{}, nil
@@ -65,9 +63,14 @@ func UserLastPasswordChange(userID int) (time.Time, error) {
 }
 
 // GetUserByEmail retrieves a user by email
-func GetUserByEmail(email string) (*postgres.User, error) {
+func GetUserByEmail(dbName, email string) (*postgres.User, error) {
+	db := postgres.GetDB(dbName)
+
 	var user postgres.User
-	err := postgres.DB.QueryRow("SELECT id, name, email, password,  active, created_at, last_password_change, role FROM users WHERE email = $1", email).Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.Active, &user.CreatedAt, &user.LastPasswordChange, &user.Role)
+	err := db.QueryRow(`SELECT id, name, email, password, active, created_at, last_password_change, role 
+		FROM users WHERE email = $1`, email).
+		Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.Active, &user.CreatedAt, &user.LastPasswordChange, &user.Role)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -78,9 +81,13 @@ func GetUserByEmail(email string) (*postgres.User, error) {
 }
 
 // GetProfileByID retrieves user profile by ID
-func GetProfileByID(userID int) (*postgres.Profile, error) {
+func GetProfileByID(dbName string, userID int) (*postgres.Profile, error) {
+	db := postgres.GetDB(dbName)
+
 	var user postgres.Profile
-	err := postgres.DB.QueryRow("SELECT id, name, email, active, created_at FROM users WHERE id = $1", userID).Scan(&user.ID, &user.Name, &user.Email, &user.Active, &user.CreatedAt)
+	err := db.QueryRow("SELECT id, name, email, active, created_at FROM users WHERE id = $1", userID).
+		Scan(&user.ID, &user.Name, &user.Email, &user.Active, &user.CreatedAt)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -91,29 +98,36 @@ func GetProfileByID(userID int) (*postgres.Profile, error) {
 }
 
 // UpdateUser updates user details
-func UpdateUser(userID int, name string) error {
-	_, err := postgres.DB.Exec("UPDATE users SET name = $1 WHERE id = $2", name, userID)
+func UpdateUser(dbName string, userID int, name string) error {
+	db := postgres.GetDB(dbName)
+	_, err := db.Exec("UPDATE users SET name = $1 WHERE id = $2", name, userID)
 	return err
 }
 
 // UpdateUserPassword updates user password
-func UpdateUserPassword(userID int, password string) error {
+func UpdateUserPassword(dbName string, userID int, password string) error {
+	db := postgres.GetDB(dbName)
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	_, err = postgres.DB.Exec("UPDATE users SET password = $1, last_password_change = NOW() WHERE id = $2", string(hashedPassword), userID)
+
+	_, err = db.Exec("UPDATE users SET password = $1, last_password_change = NOW() WHERE id = $2",
+		string(hashedPassword), userID)
 	return err
 }
 
-// DeleteUser marks a user as inactive instead of permanent deletion
-func DeleteUser(userID int) error {
-	_, err := postgres.DB.Exec("UPDATE users SET active = FALSE WHERE id = $1", userID)
+// DeleteUser marks a user as inactive
+func DeleteUser(dbName string, userID int) error {
+	db := postgres.GetDB(dbName)
+	_, err := db.Exec("UPDATE users SET active = FALSE WHERE id = $1", userID)
 	return err
 }
 
 // RecoverUser reactivates a user account
-func RecoverUser(userID int) error {
-	_, err := postgres.DB.Exec("UPDATE users SET active = TRUE WHERE id = $1", userID)
+func RecoverUser(dbName string, userID int) error {
+	db := postgres.GetDB(dbName)
+	_, err := db.Exec("UPDATE users SET active = TRUE WHERE id = $1", userID)
 	return err
 }

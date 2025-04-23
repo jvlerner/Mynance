@@ -20,7 +20,7 @@ func LoginService(c *gin.Context) {
 		return
 	}
 
-	exists, err := db.UserExists(input.Email)
+	exists, err := db.UserExists(adminDBName, input.Email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
@@ -30,7 +30,7 @@ func LoginService(c *gin.Context) {
 		return
 	}
 
-	user, err := db.GetUserByEmail(input.Email)
+	user, err := db.GetUserByEmail(adminDBName, input.Email)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return

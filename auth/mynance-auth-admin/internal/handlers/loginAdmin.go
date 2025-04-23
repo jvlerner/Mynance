@@ -52,7 +52,7 @@ func LoginAdmin(c *gin.Context) {
 		return
 	}
 
-	exists, err := db.UserExists(user.Email)
+	exists, err := db.UserExists(adminDBName, user.Email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
@@ -62,7 +62,7 @@ func LoginAdmin(c *gin.Context) {
 		return
 	}
 
-	storedUser, err := db.GetUserByEmail(user.Email)
+	storedUser, err := db.GetUserByEmail(adminDBName, user.Email)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
